@@ -159,6 +159,29 @@ app.get("/", function (req, res) {
 
             let html5QrcodeScanner = null;
             let currentTargetInput = null;
+            let isProcessing = false;
+
+            function playBeep() {
+                try {
+                    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    const oscillator = audioContext.createOscillator();
+                    const gainNode = audioContext.createGain();
+
+                    oscillator.connect(gainNode);
+                    gainNode.connect(audioContext.destination);
+
+                    oscillator.frequency.value = 800; // 800Hz beep
+                    oscillator.type = 'sine';
+
+                    gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+                    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+
+                    oscillator.start(audioContext.currentTime);
+                    oscillator.stop(audioContext.currentTime + 0.3);
+                } catch (error) {
+                    console.log('Could not play beep sound:', error);
+                }
+            }
 
             function startQrScan(button) {
                 const urlInput = button.parentElement.querySelector('.url');
@@ -186,7 +209,10 @@ app.get("/", function (req, res) {
             async function onScanSuccess(decodedText, decodedResult) {
                 console.log(\`QR Code scanned: \${decodedText}\`);
 
-                if (!currentTargetInput) return;
+                if (!currentTargetInput || isProcessing) return;
+
+                // Set processing lock to prevent multiple simultaneous scans
+                isProcessing = true;
 
                 // Show loading message
                 document.getElementById('qr-result').innerHTML = \`
@@ -222,6 +248,10 @@ app.get("/", function (req, res) {
                                 <br><small>Final URL: \${data.finalUrl}</small>
                             </div>
                         \`;
+                        // Reset processing flag after failed validation
+                        setTimeout(() => {
+                            isProcessing = false;
+                        }, 2000);
                     }
                 } catch (error) {
                     console.error('Error checking URL:', error);
@@ -230,10 +260,16 @@ app.get("/", function (req, res) {
                             ❌ Error checking URL. Please try again.
                         </div>
                     \`;
+                    // Reset processing flag after error
+                    setTimeout(() => {
+                        isProcessing = false;
+                    }, 2000);
                 }
             }
 
             function showSuccessAndClose() {
+                playBeep(); // Play success beep sound
+
                 currentTargetInput.style.backgroundColor = '#e8f5e8';
                 setTimeout(() => {
                     currentTargetInput.style.backgroundColor = '';
@@ -266,6 +302,7 @@ app.get("/", function (req, res) {
                 }
 
                 currentTargetInput = null;
+                isProcessing = false; // Reset processing flag when closing
             }
 
             // Close modal when clicking outside of it
